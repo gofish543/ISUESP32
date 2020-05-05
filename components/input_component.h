@@ -1,38 +1,53 @@
-#ifndef ESP32_CSI_INPUT_COMPONENT_H
-#define ESP32_CSI_INPUT_COMPONENT_H
+#ifndef INPUT_COMPONENT_H
+#define INPUT_COMPONENT_H
 
-#include "csi_component.h"
+#include <esp_types.h>
+#include <esp_task.h>
+#include <freertos/portmacro.h>
 
-char input_buffer[256];
-int input_buffer_pointer = 0;
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
 
-void _handle_input() {
+#include "time_component.h"
+
+#define INPUT_BUFFER_SIZE 256
+
+char input_buffer[INPUT_BUFFER_SIZE];
+int input_buffer_index = 0;
+
+void handle_input() {
     if (match_set_timestamp_template(input_buffer)) {
         printf("Setting local time to %s\n", input_buffer);
         time_set(input_buffer);
     } else {
         printf("Unable to handle input %s\n", input_buffer);
+        printf("Commands Available\n");
+
+        // Print time help menu
+        printf("\tTime:\n");
+        printf("\t  %s\n", SET_TIMESTAMP_TEMPLATE);
+        printf("\t  %s\n", SET_TIMESTAMP_SIMPLE_TEMPLATE);
     }
 }
 
 void input_check() {
-    uint8_t ch = fgetc(stdin);
+    int inputChar = fgetc(stdin);
 
-    while (ch != 0xFF) {
-        if (ch == '\n') {
-            _handle_input();
-            input_buffer[0] = '\0';
-            input_buffer_pointer = 0;
+    if (inputChar != EOF && (isprint(inputChar) || inputChar == '\n')) {
+        if (inputChar == '\n' || input_buffer_index == INPUT_BUFFER_SIZE - 1) {
+            handle_input();
+            memset(input_buffer, '\0', INPUT_BUFFER_SIZE);
+            input_buffer_index = 0;
         } else {
-            input_buffer[input_buffer_pointer] = ch;
-            input_buffer[input_buffer_pointer + 1] = '\0';
-            input_buffer_pointer++;
+            input_buffer[input_buffer_index] = inputChar;
+            input_buffer[input_buffer_index + 1] = '\0';
+            input_buffer_index++;
         }
-
-        ch = fgetc(stdin);
     }
 }
 
+_Noreturn
 void input_loop() {
     while (true) {
         input_check();
@@ -40,4 +55,4 @@ void input_loop() {
     }
 }
 
-#endif //ESP32_CSI_INPUT_COMPONENT_H
+#endif // INPUT_COMPONENT_H

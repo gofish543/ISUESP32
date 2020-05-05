@@ -1,32 +1,33 @@
-#ifndef ESP32_CSI_SD_COMPONENT_H
-#define ESP32_CSI_SD_COMPONENT_H
+#ifndef SD_COMPONENT_H
+#define SD_COMPONENT_H
 
 #include <stdio.h>
 #include <string.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
-#include "esp_err.h"
-#include "esp_log.h"
-#include "esp_vfs_fat.h"
-#include "driver/sdmmc_host.h"
-#include "driver/sdspi_host.h"
-#include "sdmmc_cmd.h"
+
+#include <esp_err.h>
+#include <esp_log.h>
+#include <esp_vfs_fat.h>
+#include <driver/sdmmc_host.h>
+#include <driver/sdspi_host.h>
+#include <sdmmc_cmd.h>
 
 #define PIN_NUM_MISO 2
 #define PIN_NUM_MOSI 15
 #define PIN_NUM_CLK  14
 #define PIN_NUM_CS   13
 
-FILE *f;
-char filename[24] = {0};
+FILE* sdcard = NULL;
+char filename[24] = "";
 
-void _sd_pick_next_file() {
-    int i = -1;
-    struct stat st;
+void sd_pick_next_file() {
+    int index = -1;
+    struct stat st = {};
     while (true) {
-        i++;
-        printf("Checking %i.csv\n", i);
-        sprintf(filename, "/sdcard/%i.csv", i);
+        index++;
+        printf("Checking %index.csv\n", index);
+        sprintf(filename, "/sdcard/%index.csv", index);
 
         if (stat(filename, &st) != 0) {
             break;
@@ -70,8 +71,8 @@ void sd_init() {
     } else {
         sdmmc_card_print_info(stdout, card);
 
-        _sd_pick_next_file();
-        f = fopen(filename, "a");
+        sd_pick_next_file();
+        sdcard = fopen(filename, "a");
     }
 #endif
 }
@@ -79,29 +80,29 @@ void sd_init() {
 /*
  * Printf for both serial AND sd card (if available and configured)
  */
-void outprintf(const char *format, ...) {
-    va_list args;
+void outprintf(const char* format, ...) {
+    va_list args = {};
     va_start(args, format);
 
-#ifdef CONFIG_SEND_CSI_TO_SERIAL
+    #ifdef CONFIG_SEND_CSI_TO_SERIAL
     vprintf(format, args);
-#endif
+    #endif
 
-#ifdef CONFIG_SEND_CSI_TO_SD
-    if (f != NULL) {
-        vfprintf(f, format, args);
+    #ifdef CONFIG_SEND_CSI_TO_SD
+    if (sdcard != NULL) {
+        vfprintf(sdcard, format, args);
     }
-#endif
+    #endif
 
     va_end(args);
 }
 
 void sd_flush() {
-#ifdef CONFIG_SEND_CSI_TO_SD
-    fflush(f);
-    fclose(f);
-    f = fopen(filename, "a");
-#endif
+    #ifdef CONFIG_SEND_CSI_TO_SD
+    fflush(sdcard);
+    fclose(sdcard);
+    sdcard = fopen(filename, "a");
+    #endif
 }
 
-#endif //ESP32_CSI_SD_COMPONENT_H
+#endif // SD_COMPONENT_H

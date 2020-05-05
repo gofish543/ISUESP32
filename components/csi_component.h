@@ -4,33 +4,52 @@
 #include "time_component.h"
 #include "math.h"
 
-char* project_type;
+char* projectType;
 
 #define CSI_RAW 1
 #define CSI_AMPLITUDE 0
 #define CSI_PHASE 0
 
-#define CSI_TYPE CSI_RAW
+char* types[] = {
+        "Management", "Control", "Data", "Misc"
+};
 
-void _wifi_sniffer_cb(void* recv_buf, wifi_promiscuous_pkt_type_t type) {
-    if (type == 0) {
-        outprintf("We found a management frame!\n");
-    } else if (type == 1) {
-        outprintf("We found a control frame frame!\n");
-    } else if (type == 3) {
-        outprintf("We found a data frame frame!\n");
-    } else {
-        outprintf("We found a extension frame frame!\n");
+void print_byte_as_bits(unsigned char val) {
+    for (int i = 7; 0 <= i; i--) {
+        outprintf("%c", (val & (1 << i)) ? '1' : '0');
     }
 }
 
-void _wifi_csi_cb(void* ctx, wifi_csi_info_t* data) {
+void print_bits(unsigned char* bytes, size_t num_bytes) {
+    outprintf("[ ");
+    for (size_t i = 0; i < num_bytes; i++) {
+        print_byte_as_bits(bytes[i]);
+        outprintf(" ");
+    }
+    outprintf("]\n");
+}
+
+void wifi_promiscuous_sniffer(void* recv_buf, wifi_promiscuous_pkt_type_t type) {
+    wifi_promiscuous_pkt_t* buffer = (wifi_promiscuous_pkt_t*) recv_buf;
+
+    outprintf("Packet Found\n");
+    outprintf("Frame Type %s\n", types[type]);
+    outprintf("Size: %d\n", buffer->rx_ctrl.sig_len);
+    outprintf("Channel: %d\n", buffer->rx_ctrl.channel);
+
+    // More work needs to be done here @todo
+}
+
+void wifi_csi_sniffer(void* ctx, wifi_csi_info_t* data) {
+    // This was taken from the main sniffer repository
+    // More work can be done to improve this @todo
+
     wifi_csi_info_t d = data[0];
     char mac[20] = {0};
     sprintf(mac, "%02X:%02X:%02X:%02X:%02X:%02X", d.mac[0], d.mac[1], d.mac[2], d.mac[3], d.mac[4], d.mac[5]);
 
     outprintf("CSI_DATA,");
-    outprintf("%s,", project_type);
+    outprintf("%s,", projectType);
     outprintf("%s,", mac);
 
     // https://github.com/espressif/esp-idf/blob/9d0ca60398481a44861542638cfdc1949bb6f312/components/esp_wifi/include/esp_wifi_types.h#L314
@@ -93,18 +112,13 @@ void _wifi_csi_cb(void* ctx, wifi_csi_info_t* data) {
     vTaskDelay(0);
 }
 
-void _print_csi_csv_header() {
-    char* header_str = "type,role,mac,rssi,rate,sig_mode,mcs,bandwidth,smoothing,not_sounding,aggregation,stbc,fec_coding,sgi,noise_floor,ampdu_cnt,channel,secondary_channel,local_timestamp,ant,sig_len,rx_state,real_time_set,real_timestamp,len,CSI_DATA\n";
-    outprintf(header_str);
-}
-
 void csi_init(char* type) {
-    project_type = type;
+    projectType = type;
 
 #ifdef CONFIG_SHOULD_COLLECT_CSI
     ESP_ERROR_CHECK(esp_wifi_set_csi(1));
 
-    // @See: https://github.com/espressif/esp-idf/blob/master/components/esp_wifi/include/esp_wifi_types.h#L401
+    // @Link https://github.com/espressif/esp-idf/blob/master/components/esp_wifi/include/esp_wifi_types.h#L401
     wifi_csi_config_t configuration_csi;
     configuration_csi.lltf_en = 1;
     configuration_csi.htltf_en = 1;
@@ -114,10 +128,10 @@ void csi_init(char* type) {
     configuration_csi.manu_scale = 0;
 
     ESP_ERROR_CHECK(esp_wifi_set_csi_config(&configuration_csi));
-    ESP_ERROR_CHECK(esp_wifi_set_promiscuous_rx_cb(&_wifi_sniffer_cb));
-//    ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(&_wifi_csi_cb, NULL));
 
-//    _print_csi_csv_header();
+    ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(&wifi_csi_sniffer, NULL));
+    ESP_ERROR_CHECK(esp_wifi_set_promiscuous_rx_cb(&wifi_promiscuous_sniffer));
+
 #endif
 }
 
